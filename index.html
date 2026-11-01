@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AV-Marine 0.1 — Mô hình hệ thống năng lượng</title>
+<style>
+:root{color-scheme:dark;--bg:#07111c;--panel:#0e1d2c;--line:#29435b;--text:#e8f1fa;--muted:#9db2c6;--accent:#48d6bd;--warn:#ffcf70}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:16px 18px;border-bottom:1px solid var(--line);background:#091725;position:sticky;top:0;z-index:3}
+h1{font-size:20px;margin:0 0 5px}p{margin:5px 0;color:var(--muted)}.tag{display:inline-block;border:1px solid #37766e;color:#9af0dc;border-radius:20px;padding:3px 8px;font-size:11px;margin-right:6px}
+main{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr);gap:12px;padding:12px;max-width:1500px;margin:auto}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}.panel h2{font-size:15px;margin:0;padding:12px 14px;border-bottom:1px solid var(--line)}
+#sceneWrap{position:relative;height:min(65vh,620px);min-height:360px;background:radial-gradient(ellipse at center,#173149,#08131f 75%)}canvas{display:block;width:100%;height:100%}
+.overlay{position:absolute;left:10px;top:10px;background:#06101dcc;padding:8px 10px;border:1px solid #34516b;border-radius:8px;font-size:12px;color:#c4d7e7;pointer-events:none}
+.controls{padding:12px;display:grid;gap:10px}.control{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center}.control label{color:#d8e7f4}.control output{color:var(--accent);font-variant-numeric:tabular-nums}input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+select,button{background:#142b40;color:var(--text);border:1px solid #36536e;border-radius:8px;padding:9px;font:inherit}button{cursor:pointer}button:hover{border-color:var(--accent)}.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px}.stat{border:1px solid var(--line);border-radius:9px;padding:10px}.stat small{display:block;color:var(--muted)}.stat strong{font-size:19px;font-variant-numeric:tabular-nums}
+.legend{padding:0 12px 12px;display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:12px}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.info{padding:12px 14px;border-top:1px solid var(--line)}.info h3{font-size:13px;margin:0 0 5px;color:#b8d9f2}.info ul{margin:6px 0;padding-left:18px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:12px}td,th{text-align:left;padding:8px;border-bottom:1px solid var(--line)}th{color:#a9c3d8;font-weight:600}.note{margin:12px;padding:11px;border-left:3px solid var(--warn);background:#2b2618;color:#f3deb1;border-radius:5px}
+footer{padding:12px 16px;color:var(--muted);font-size:12px;text-align:center}
+@media(max-width:800px){main{grid-template-columns:1fr;padding:8px}#sceneWrap{height:48vh;min-height:320px}header{position:static}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<header>
+  <h1>AV-Marine 0.2 — Tàu và hệ thống năng lượng</h1>
+  <p>Mô hình tàu 3D dạng concept, có boong, thân tàu, mũi/đuôi, container và hệ thống năng lượng • Chạy cục bộ trong trình duyệt</p>
+  <span class="tag">BẢN NGHIÊN CỨU</span><span class="tag">KHÔNG PHẢI BẢN VẼ ĐÓNG TÀU</span>
+</header>
+<main>
+  <section class="panel">
+    <h2>Mô hình tàu 3D tương tác</h2>
+    <div id="sceneWrap">
+      <canvas id="scene" aria-label="Mô hình 3D hệ thống năng lượng tàu"></canvas>
+      <div class="overlay">Kéo để xoay • Cuộn/chụm để zoom<br>Nhấn vào khối để xem chức năng</div>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:#48d6bd"></i>Điện / bus</span>
+      <span><i class="dot" style="background:#f4b95f"></i>Nguồn phát</span>
+      <span><i class="dot" style="background:#66aaff"></i>Lưu trữ</span>
+      <span><i class="dot" style="background:#b48cff"></i>Động cơ / truyền động</span>
+    </div>
+    <div class="info" id="partInfo">
+      <h3>Chọn một bộ phận</h3>
+      <p>Chạm vào một khối trong mô hình để đọc chức năng, thông số giả định và lưu ý kỹ thuật.</p>
+    </div>
+  </section>
+  <div style="display:grid;gap:12px;align-content:start">
+    <section class="panel">
+      <h2>Điều chỉnh mô phỏng</h2>
+      <div class="controls">
+        <div class="control"><label for="vessel">Cấu hình tàu</label></div>
+        <select id="vessel"><option value="container">AV-C 01 — tàu container</option><option value="bulk">AV-B 01 — tàu hàng rời</option></select>
+        <div class="control"><label for="speed">Tốc độ mục tiêu</label><output id="speedOut">18 kn</output><input id="speed" type="range" min="8" max="22" step=".5" value="18"></div>
+        <div class="control"><label for="margin">Dự phòng công suất</label><output id="marginOut">20%</output><input id="margin" type="range" min="10" max="35" step="5" value="20"></div>
+        <div class="control"><label for="hotel">Tải điện phụ trợ</label><output id="hotelOut">1.5 MW</output><input id="hotel" type="range" min=".5" max="4" step=".25" value="1.5"></div>
+        <div class="control"><label for="battery">Pin khả dụng</label><output id="batteryOut">20 MWh</output><input id="battery" type="range" min="5" max="80" step="5" value="20"></div>
+        <div class="control"><label for="weather">Hệ số thời tiết / thân tàu</label><output id="weatherOut">1.15×</output><input id="weather" type="range" min="1" max="1.6" step=".05" value="1.15"></div>
+        <div class="btnrow"><button id="reset">Khôi phục mặc định</button><button id="toggleLabels">Ẩn/hiện nhãn</button></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Kết quả ước tính trực tiếp</h2>
+      <div class="stats">
+        <div class="stat"><small>Công suất trục ước tính</small><strong id="shaft">29.6 MW</strong></div>
+        <div class="stat"><small>Công suất phát lắp đặt gợi ý</small><strong id="installed">35.6 MW</strong></div>
+        <div class="stat"><small>Tổng tải điện quy đổi</small><strong id="total">31.1 MW</strong></div>
+        <div class="stat"><small>Năng lượng 24 giờ</small><strong id="daily">746 MWh</strong></div>
+        <div class="stat"><small>Hành trình 10.000 hải lý</small><strong id="trip">23.1 ngày</strong></div>
+        <div class="stat"><small>Pin cấp tải phụ trợ lý tưởng</small><strong id="backup">13.3 giờ</strong></div>
+      </div>
+      <div class="note">Các con số là ước tính sàng lọc theo quan hệ công suất gần đúng \(P ∝ V^3\), có hệ số thời tiết do người dùng chỉnh. Không dùng để chọn máy chính hoặc đóng tàu thật.</div>
+    </section>
+    <section class="panel">
+      <h2>Sơ đồ dòng năng lượng</h2>
+      <table><thead><tr><th>Khối</th><th>Vai trò</th><th>Trạng thái bản 0.1</th></tr></thead><tbody>
+      <tr><td>Động cơ chính</td><td>Tạo công cơ học</td><td>Giả định diesel hàng hải hiệu suất cao</td></tr>
+      <tr><td>Máy phát điện</td><td>Cấp tải điện tàu</td><td>Phân tải theo nhu cầu</td></tr>
+      <tr><td>Pin + bộ biến đổi</td><td>Đệm tải đỉnh / dự phòng ngắn hạn</td><td>Không thay thế nhiên liệu xuyên đại dương</td></tr>
+      <tr><td>Thu hồi nhiệt</td><td>Tận dụng nhiệt thải nếu hiệu quả</td><td>Cần đánh giá cân bằng nhiệt</td></tr>
+      <tr><td>Trục + chân vịt</td><td>Đẩy tàu</td><td>Cần tối ưu bằng đường cong sức cản</td></tr>
+      <tr><td>Điều khiển năng lượng</td><td>Phân phối và giám sát</td><td>Không được ghi đè hệ thống an toàn</td></tr>
+      </tbody></table>
+    </section>
+  </div>
+</main>
+<footer>AV-Marine 0.2 • Tài liệu concept để thảo luận và chia sẻ. Chưa phải thiết kế được phân cấp, chứng nhận hoặc đủ điều kiện chế tạo.</footer>
+<script>
+(() => {
+const canvas=document.getElementById('scene'),ctx=canvas.getContext('2d');
+const wrap=document.getElementById('sceneWrap');
+let yaw=-.55,pitch=.32,zoom=1,drag=null,showLabels=true,parts=[],selected=-1;
+const defs=[
+ {id:'engine',name:'1. Động cơ chính',pos:[-2.7,0,0],size:[1.25,1.05,1.15],color:'#f4b95f',desc:'Nguồn công cơ học cho hệ đẩy. Bản 0.1 giả định động cơ hàng hải dùng nhiên liệu lỏng; công suất thực phải xác định từ thử nghiệm sức cản, chân vịt và chế độ khai thác.',spec:'Container: khoảng 35.6 MW công suất trục lắp đặt sơ bộ • Bulk: khoảng 11.7 MW. Giá trị chưa phải thông số chọn máy.'},
+ {id:'generator',name:'2. Máy phát điện',pos:[-1.25,.45,-.15],size:[.9,.75,.8],color:'#f4b95f',desc:'Cấp điện cho bơm, thông gió, điều khiển, sinh hoạt và thiết bị hàng hải. Cần cấu hình dự phòng, phân đoạn bảng điện và bảo vệ sự cố.',spec:'Tải phụ trợ do người dùng điều chỉnh: 0.5–4 MW; cần lập bảng tải thực tế.'},
+ {id:'bus',name:'3. Bus điện / quản lý năng lượng',pos:[0,.1,0],size:[1.25,.35,.75],color:'#48d6bd',desc:'Điểm phân phối điện có giám sát tải, ưu tiên phụ tải quan trọng và tách sự cố. Điều khiển tự động không được vượt quyền thuyền trưởng hoặc bảo vệ độc lập.',spec:'Bản 0.1: mô phỏng khái niệm; chưa có sơ đồ đơn tuyến, điện áp hoặc dòng ngắn mạch.'},
+ {id:'battery',name:'4. Pin + bộ biến đổi',pos:[1.35,-.15,.25],size:[1,.8,.9],color:'#66aaff',desc:'Bộ đệm cho tải đỉnh và dự phòng ngắn hạn; bộ biến đổi ghép pin với bus điện. Cần làm mát, phát hiện cháy, cô lập vùng và phân tích runaway nhiệt.',spec:'Dung lượng giả lập: 5–80 MWh. Không mặc định pin đủ sức thay động cơ chính trên tuyến xuyên đại dương.'},
+ {id:'waste',name:'5. Thu hồi nhiệt thải',pos:[-2.45,1.15,-.1],size:[.8,.55,.65],color:'#ff8b62',desc:'Có thể tận dụng nhiệt khí xả/nước làm mát cho nhu cầu nhiệt hoặc phát điện nếu cân bằng nhiệt và thời gian hoàn vốn phù hợp.',spec:'Chưa cộng công suất thu hồi vào kết quả; cần dữ liệu tiêu hao nhiên liệu và nhiệt độ/ lưu lượng khí xả.'},
+ {id:'shaft',name:'6. Hộp số / trục chân vịt',pos:[2.75,.0,0],size:[1.2,.4,.45],color:'#b48cff',desc:'Truyền công suất tới chân vịt. Hình minh họa không thể hiện thiết kế trục, ổ đỡ, hộp số hoặc chống rung ở mức chế tạo.',spec:'Cần phối hợp tốc độ quay, đường kính chân vịt, cavitation, hiệu suất và khả năng cơ động.'},
+ {id:'prop',name:'7. Chân vịt',pos:[4.05,0,0],size:[.35,1.1,.95],color:'#b48cff',desc:'Chuyển công cơ học thành lực đẩy. Thiết kế cuối cần CFD/thử bể kéo hoặc phương pháp tương đương và kiểm tra xâm thực, rung, tiếng ồn.',spec:'Chỉ là biểu tượng 3D; không đại diện hình học chân vịt thực.'}
+];
+function resize(){const r=wrap.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.max(1,Math.floor(r.width*dpr));canvas.height=Math.max(1,Math.floor(r.height*dpr));ctx.setTransform(dpr,0,0,dpr,0,0);draw()}
+function project(p){let [x,y,z]=p;let ca=Math.cos(yaw),sa=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);let xx=x*ca-z*sa,zz=x*sa+z*ca,yy=y*cp-zz*sp;zz=y*sp+zz*cp;let scale=Math.min(wrap.clientWidth,wrap.clientHeight)*.075*zoom;return [wrap.clientWidth/2+xx*scale,wrap.clientHeight*.52-yy*scale,zz]}
+function cubeVertices(p,s){let a=s.map(v=>v/2),v=[];for(let i=0;i<8;i++)v.push([p[0]+(i&1?a[0]:-a[0]),p[1]+(i&2?a[1]:-a[1]),p[2]+(i&4?a[2]:-a[2])]);return v}
+const faces=[[0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]];
+function draw(){
+ const w=wrap.clientWidth,h=wrap.clientHeight;ctx.clearRect(0,0,w,h);
+ // Subtle sea-plane grid
+ ctx.strokeStyle='#163047';ctx.lineWidth=1;
+ for(let i=-5;i<=5;i++){
+   let a=project([i,-1.25,-4]),b=project([i,-1.25,4]),c=project([-5,-1.25,i*.72]),d=project([5,-1.25,i*.72]);
+   ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.moveTo(c[0],c[1]);ctx.lineTo(d[0],d[1]);ctx.stroke();
+ }
+ // Ship hull: elongated, tapered bow at +X, stern at -X. Draw as layered 3D polygons.
+ const hullTop=[[-4.8,-.48,-1.15],[-3.9,-.48,-1.55],[3.65,-.48,-1.35],[4.7,-.48,0],[3.65,-.48,1.35],[-3.9,-.48,1.55],[-4.8,-.48,1.15]];
+ const hullBottom=[[-4.45,-1.05,-.92],[-3.7,-1.05,-1.2],[3.45,-1.05,-1.0],[4.15,-1.05,0],[3.45,-1.05,1.0],[-3.7,-1.05,1.2],[-4.45,-1.05,.92]];
+ function poly(points,fill,stroke='#06101a',width=1.5){let pts=points.map(project);ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke()}
+ // visible hull sides
+ poly([hullTop[0],hullTop[1],hullBottom[1],hullBottom[0]],'#24506a');
+ poly([hullTop[1],hullTop[2],hullBottom[2],hullBottom[1]],'#1b4058');
+ poly([hullTop[2],hullTop[3],hullBottom[3],hullBottom[2]],'#28516a');
+ poly([hullTop[3],hullTop[4],hullBottom[4],hullBottom[3]],'#35627a');
+ poly([hullTop[4],hullTop[5],hullBottom[5],hullBottom[4]],'#1b4058');
+ poly([hullTop[5],hullTop[6],hullBottom[6],hullBottom[5]],'#24506a');
+ poly(hullTop,'#54788b','#9ab6c8',2);
+ // deck panels / cargo zone
+ poly([[-3.75,-.43,-1.15],[2.8,-.43,-1.0],[3.65,-.43,0],[2.8,-.43,1.0],[-3.75,-.43,1.15],[-4.25,-.43,0]],'#344d5d','#7793a5',1.2);
+ // deck cargo containers on aft/midship; stacked low so hull remains recognizable
+ const containerColors=['#c75e4d','#d7a34f','#4f93bd','#6aaf91','#b47bce'];
+ for(let row=0;row<2;row++)for(let col=0;col<5;col++){
+   let x=-2.85+col*.83, z=(row===0?-.58:.12);
+   let d={pos:[x,.05+(col%2)*.04,z],size:[.72,.72,.56],color:containerColors[(col+row*2)%containerColors.length]};
+   let v=cubeVertices(d.pos,d.size).map(project);
+   faces.map(f=>({f,z:f.reduce((s,i)=>s+v[i][2],0)/f.length})).sort((a,b)=>a.z-b.z).forEach(({f},fi)=>{
+     ctx.beginPath();f.forEach((n,j)=>j?ctx.lineTo(v[n][0],v[n][1]):ctx.moveTo(v[n][0],v[n][1]));ctx.closePath();ctx.fillStyle=shade(d.color,fi);ctx.fill();ctx.strokeStyle='#172a37';ctx.lineWidth=1;ctx.stroke();
+   });
+ }
+ // bridge/superstructure at stern (-X), distinct white block and dark windows
+ const bridge={pos:[-3.75,.15,0],size:[.72,1.1,.95],color:'#dce6eb'};
+ let bv=cubeVertices(bridge.pos,bridge.size).map(project);
+ faces.map(f=>({f,z:f.reduce((s,i)=>s+bv[i][2],0)/f.length})).sort((a,b)=>a.z-b.z).forEach(({f},fi)=>{ctx.beginPath();f.forEach((n,j)=>j?ctx.lineTo(bv[n][0],bv[n][1]):ctx.moveTo(bv[n][0],bv[n][1]));ctx.closePath();ctx.fillStyle=shade(bridge.color,fi);ctx.fill();ctx.strokeStyle='#263d4b';ctx.stroke()});
+ let bc=project(bridge.pos);ctx.fillStyle='#264b61';ctx.fillRect(bc[0]-9,bc[1]-10,18,5);
+ // Energy system components shown as cutaway blocks over midship, with links.
+ parts=[];
+ defs.forEach((d,idx)=>{
+   let v=cubeVertices(d.pos,d.size).map(project);
+   faces.map(f=>({f,z:f.reduce((s,i)=>s+v[i][2],0)/f.length})).sort((a,b)=>a.z-b.z).forEach(({f},fi)=>{
+     ctx.beginPath();f.forEach((n,j)=>j?ctx.lineTo(v[n][0],v[n][1]):ctx.moveTo(v[n][0],v[n][1]));ctx.closePath();ctx.fillStyle=shade(d.color,fi);ctx.fill();ctx.strokeStyle=idx===selected?'#ffffff':'#07131e';ctx.lineWidth=idx===selected?2.5:1;ctx.stroke();
+   });
+   let c=project(d.pos);parts.push({idx,x:c[0],y:c[1],r:Math.max(26,Math.max(d.size[0],d.size[1],d.size[2])*8*zoom)});
+ });
+ // Connections drawn above hull to clarify energy flow
+ const links=[['engine','generator'],['engine','waste'],['generator','bus'],['bus','battery'],['bus','shaft'],['shaft','prop']];
+ for(const [a,b] of links){let A=defs.find(x=>x.id===a),B=defs.find(x=>x.id===b),p=project(A.pos),q=project(B.pos);ctx.strokeStyle='#48d6bd';ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke()}
+ // Propeller symbol near stern and bow direction marker
+ let prop=project([4.1,-.75,0]);ctx.strokeStyle='#d3b8ff';ctx.lineWidth=3;
+ for(let a=0;a<3;a++){let t=a*Math.PI/3;ctx.beginPath();ctx.moveTo(prop[0]-Math.cos(t)*8,prop[1]-Math.sin(t)*8);ctx.lineTo(prop[0]+Math.cos(t)*8,prop[1]+Math.sin(t)*8);ctx.stroke()}
+ let bow=project([4.55,-.15,0]);ctx.fillStyle='#e7f4ff';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText('MŨI TÀU',bow[0],bow[1]-14);
+ let stern=project([-4.45,-.35,0]);ctx.fillText('ĐUÔI TÀU',stern[0],stern[1]-15);
+ if(showLabels){
+   defs.forEach((d,idx)=>{let c=project(d.pos);ctx.font='11px system-ui';ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='#07111c';ctx.fillStyle='#f1f7fb';let t=d.name;ctx.strokeText(t,c[0],c[1]-23);ctx.fillText(t,c[0],c[1]-23)});
+ }
+ if(selected>=0)showPart(selected);
+}
+function shade(hex,i){let n=[.62,.75,.88,1,.68,.82][i%6],v=parseInt(hex.slice(1),16),r=Math.min(255,((v>>16)&255)*n),g=Math.min(255,((v>>8)&255)*n),b=Math.min(255,(v&255)*n);return `rgb(${r},${g},${b})`}
+function showPart(i){let d=defs[i];document.getElementById('partInfo').innerHTML=`<h3>${d.name}</h3><p>${d.desc}</p><p><b style="color:#48d6bd">Thông số / lưu ý:</b> ${d.spec}</p>`}
+function pointerDown(e){drag={x:e.clientX,y:e.clientY,moved:false};canvas.setPointerCapture(e.pointerId)}
+function pointerMove(e){if(!drag)return;let dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>2)drag.moved=true;yaw+=dx*.008;pitch=Math.max(-1.05,Math.min(1.05,pitch+dy*.006));drag.x=e.clientX;drag.y=e.clientY;draw()}
+function pointerUp(e){if(!drag)return;if(!drag.moved){let r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let near=-1,dist=Infinity;parts.forEach(p=>{let d=Math.hypot(x-p.x,y-p.y);if(d<p.r&&d<dist){near=p.idx;dist=d}});if(near>=0){selected=near;showPart(near);draw()}}drag=null}
+canvas.addEventListener('pointerdown',pointerDown);canvas.addEventListener('pointermove',pointerMove);canvas.addEventListener('pointerup',pointerUp);canvas.addEventListener('pointercancel',()=>drag=null);
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.55,Math.min(1.8,zoom*(e.deltaY<0?1.08:.92)));draw()},{passive:false});
+let pinch0=null;canvas.addEventListener('touchstart',e=>{if(e.touches.length===2)pinch0={dist:Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY),zoom}},{passive:true});
+canvas.addEventListener('touchmove',e=>{if(e.touches.length===2&&pinch0){let d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);zoom=Math.max(.55,Math.min(1.8,pinch0.zoom*d/pinch0.dist));draw()}},{passive:true});
+function calc(){
+ let v=+document.getElementById('speed').value,margin=+document.getElementById('margin').value/100,hotel=+document.getElementById('hotel').value,batt=+document.getElementById('battery').value,weather=+document.getElementById('weather').value;
+ let isC=document.getElementById('vessel').value==='container',baseV=isC?18:14,baseP=isC?29.634:9.760;
+ let shaft=baseP*Math.pow(v/baseV,3)*weather,installed=shaft*(1+margin),total=shaft+hotel,daily=total*24,trip=10000/(v*24),backup=batt/hotel;
+ document.getElementById('speedOut').textContent=v.toFixed(1)+' kn';document.getElementById('marginOut').textContent=Math.round(margin*100)+'%';document.getElementById('hotelOut').textContent=hotel.toFixed(2).replace(/0$/,'')+' MW';document.getElementById('batteryOut').textContent=batt+' MWh';document.getElementById('weatherOut').textContent=weather.toFixed(2)+'×';
+ document.getElementById('shaft').textContent=shaft.toFixed(1)+' MW';document.getElementById('installed').textContent=installed.toFixed(1)+' MW';document.getElementById('total').textContent=total.toFixed(1)+' MW';document.getElementById('daily').textContent=Math.round(daily)+' MWh';document.getElementById('trip').textContent=trip.toFixed(1)+' ngày';document.getElementById('backup').textContent=backup.toFixed(1)+' giờ';
+}
+['vessel','speed','margin','hotel','battery','weather'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{if(id==='vessel'){let isC=document.getElementById('vessel').value==='container';document.getElementById('speed').value=isC?18:14;document.getElementById('speed').min=isC?8:6;document.getElementById('speed').max=isC?22:18}calc()}));
+document.getElementById('reset').addEventListener('click',()=>{document.getElementById('vessel').value='container';document.getElementById('speed').value=18;document.getElementById('margin').value=20;document.getElementById('hotel').value=1.5;document.getElementById('battery').value=20;document.getElementById('weather').value=1.15;calc()});
+document.getElementById('toggleLabels').addEventListener('click',()=>{showLabels=!showLabels;draw()});
+window.addEventListener('resize',resize);resize();calc();showPart(0);
+})();
+</script>
+</body>
+</html>
